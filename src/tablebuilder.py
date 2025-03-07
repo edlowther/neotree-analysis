@@ -1,5 +1,7 @@
 import pandas as pd
+import numpy as np
 from dataclasses import dataclass
+from scipy.stats import mannwhitneyu, chi2_contingency
 
 @dataclass
 class Variable:
@@ -17,7 +19,7 @@ class TableBuilder():
     def __init__(self):
         self.variables = [
             Variable('Age', 'Age (hour)', 'float'), 
-            Variable('Gender', 'Gender', 'cat', [Value('F', 'Female'), Value('M', 'Male'), Value('NS', 'Ambiguous')]),
+            Variable('Gender', 'Gender', 'cat', [Value('female', 'Female'), Value('male', 'Male'), Value('not_sure', 'Ambiguous')]),
             Variable('Gestation', 'Gestational age', 'int'),
             Variable('Birthweight', 'Birth weight', 'int'), 
             Variable('Temperature', 'Temperature at admission', 'float'), 
@@ -27,41 +29,41 @@ class TableBuilder():
             Variable('Rr', 'Respiratory rate', 'int'), 
             Variable('Satsair', 'Oxygen saturation in air', 'float'), 
             Variable('Typebirth', 'Type of birth', 'cat', [
-                Value('S', 'Singleton'), Value('Tw1', 'Twin 1'), Value('Tw2', 'Twin 2'), Value('Tr1', 'Triplet 1'), Value('Tr2', 'Triplet 2'), Value('Tr3', 'Triplet 3'), 
-                Value('OT', 'Other')
+                Value('single', 'Singleton'), Value('twin', 'Twin'), Value('triplet', 'Triplet')
             ]), 
+            # 'missing', 'NOPROM', '< 18 hours', 'PROM', '> 18 hours'
             Variable('Romlength', 'Premature rupture of membrane', 'cat', [
-                Value('PROM', 'Yes'), Value('NOPROM', 'No rupture')
+                Value('prom', 'Yes'), Value('noprom', 'No rupture'), Value('missing', 'Missing')
             ]), 
             Variable('Skin', 'Skin condition', 'cat', [
-                Value('Rash', 'Rash'), Value('PUST', 'Pustules'), Value('BOIL', 'Boils'), Value('{Rash,BOIL}', 'Rash and boils'), Value('Folds', 'Folds'), Value('None', 'None')
+                Value('condition_present', 'Condition present'), Value('missing', 'Missing')
             ]), 
             Variable('Wob', 'Work of breathing', 'cat', [
-                Value('Mild', 'Mild'), Value('Mod', 'Moderate'), Value('Sev', 'Severe')
+                Value('mild', 'Mild'), Value('moderate', 'Moderate'), Value('severe', 'Severe'), Value('missing', 'Missing')
             ]), 
             Variable('Signsrd', 'Signs of respiratory distress', 'cat', [
-                Value('NOT_None', 'Signs present'), Value('None', 'No signs')
+                Value('signs_present', 'Signs present'), Value('missing', 'Missing')
             ]), 
             Variable('Dangersigns', 'Danger signs', 'cat', [
-                Value('NOT_None', 'Danger signs present'), Value('None', 'No danger signs')
+                Value('signs_present', 'Signs present'), Value('missing', 'Missing')
             ]), 
             Variable('Activity', 'Alertness', 'cat', [
-                Value('Alert', 'Alert'), Value('Coma', 'Coma'), Value('Conv|Convulsions', 'Convulsions'), Value('Leth', 'Lethargic'), Value('Irrit', 'Irritable')
+                Value('alert', 'Alert'), Value('coma', 'Coma'), Value('convulsions', 'Convulsions'), Value('lethargic', 'Lethargic'), Value('irritable', 'Irritable')
             ]), 
             Variable('Colour', 'Colour', 'cat', [
-                Value('Pink', 'Pink'), Value('Blue', 'Blue'), Value('White', 'White'), Value('Yell', 'Yellow'), Value('{Yell,White}', 'Yellow/white')
+                Value('Pink', 'Pink'), Value('Blue', 'Blue'), Value('{Pink,White}', 'Pink/white'), Value('White', 'White'), Value('Yell', 'Yellow'), Value('{Yell,White}', 'Yellow/white'), Value('missing', 'Missing')
             ]), 
             Variable('Umbilicus', 'Umbilicus', 'cat', [
-                Value('Norm', 'Normal'), Value('NOT_Norm', 'Abnormal')
+                Value('Norm', 'Normal'), Value('NOT_Norm', 'Abnormal'), Value('missing', 'Missing')
             ]), 
             Variable('Vomiting', 'Vomiting', 'cat', [
-                Value('Poss', 'Small milky possets after feeds (normal)'), Value('*', 'Yes (all feeds/ blood/ green)'), Value('No', 'No')
+                Value('Poss', 'Small milky possets after feeds (normal)'), Value('*', 'Yes (all feeds/ blood/ green)'), Value('No', 'No'), Value('missing', 'Missing')
             ]), 
             Variable('Abdomen', 'Abdomen check', 'cat', [
-                Value('Norm', 'Normal'), Value('NOT_Norm', 'Abnormal')
+                Value('Norm', 'Normal'), Value('NOT_Norm', 'Abnormal'), Value('missing', 'Missing')
             ]), 
             Variable('Fontanelle', 'Fontanelle', 'cat', [
-                Value('Flat', 'Flat'), Value('Bulg', 'Bulging'), Value('Sunk', 'Sunken')
+                Value('flat', 'Flat'), Value('bulging', 'Bulging'), Value('sunken', 'Sunken')
             ])
         ]
         
@@ -84,6 +86,11 @@ class TableBuilder():
                     if variable.data_type == 'int':
                         median, q1, q3 = map(round, [median, q1, q3])
                     row.append(f'{median} [{q1}-{q3}]')
+                # p = mannwhitneyu(data_manager.df.loc[data_manager.df['bc_positive_or_diagnosis_or_cause_of_death'] == True, variable.data_name], 
+                #                        data_manager.df.loc[data_manager.df['bc_positive_or_diagnosis_or_cause_of_death'] == False, variable.data_name],
+                #                 nan_policy='omit').pvalue
+                # print(p)
+                # row.append(p)
                 output.append(row)
             elif variable.data_type == 'cat':
                 for row_idx, value in enumerate(variable.values):
@@ -107,7 +114,7 @@ class TableBuilder():
                     elif '|' in value.data_name:
                         row_n = 0
                         for data_name_version in value.data_name.split('|'):
-                            row_n += len(data_manager.df.loc[data_manager.df[variable.data_name] == data_name_version])
+                            row_n += len(data_manager.df.loc[data_manager.df[variable.data_name].str.strip() == data_name_version])
                     else: 
                         row_n = len(data_manager.df.loc[data_manager.df[variable.data_name] == value.data_name])
                     pct = row_n / len(data_manager.df) * 100
@@ -135,12 +142,31 @@ class TableBuilder():
                             n = len(data_manager.df.loc[
                                 (data_manager.df['bc_positive_or_diagnosis_or_cause_of_death'] == boolean) & 
                                 (data_manager.df[variable.data_name] == value.data_name)])
-                        pct = n / row_n * 100
-                        row.append(f'{n} ({pct:.2f})')            
+                        pct = n / len(data_manager.df.loc[data_manager.df['bc_positive_or_diagnosis_or_cause_of_death'] == boolean]) * 100
+                        row.append(f'{n} ({pct:.2f})')
+                    if row_idx == 0:
+                        x = []
+                        y = []
+                        for v in data_manager.df[variable.data_name].unique():
+                            print(v)
+                            x.append(len(data_manager.df.loc[
+                                (data_manager.df[variable.data_name] == v) & 
+                                (data_manager.df['bc_positive_or_diagnosis_or_cause_of_death'] == True)
+                            ]))
+                            y.append(len(data_manager.df.loc[
+                                (data_manager.df[variable.data_name] == v) & 
+                                (data_manager.df['bc_positive_or_diagnosis_or_cause_of_death'] == False)
+                            ]))
+                        # p = chi2_contingency(np.array([x, y])).pvalue
+                        # row.append(p)
+                    else:
+                        pass
+                        # row.append(' ')
+                        
                     output.append(row)
             n_nas = pd.isna(values).sum()
             if n_nas > 0:
-                missing_text = 'Missing' if variable.data_type == 'cat' else 'Missing n (%)'
+                missing_text = 'Missing' #if variable.data_type == 'cat' else 'Missing n (%)'
                 pct = n_nas / len(data_manager.df) * 100
                 row = ['', missing_text, f'{n_nas} ({pct:.2f})'] # + ['-'] * 2
                 for boolean in [True, False]: 
